@@ -50,7 +50,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           node-version: 18
-          pnpm-version: 8.15.5
+          pnpm-version: 9
           skip-tsc: false
 
       - name: Publish all packages to npm
@@ -103,7 +103,7 @@ jobs:
               owner: 'prisma',
               repo: '${{ env.REPO_NAME }}',
               tag: '${{ env.TAG_NAME }}',
-              message: '${{ env.MESSAGE }}',
+              message: '${{ env.TAG_NAME }}',
               object: '${{ env.COMMIT_HASH }}',
               type: 'commit',
             })

@@ -2,14 +2,28 @@ import Debug from '@prisma/debug'
 import { enginesVersion, getCliQueryEngineBinaryType } from '@prisma/engines'
 import type { DownloadOptions } from '@prisma/fetch-engine'
 import { download } from '@prisma/fetch-engine'
-import type { BinaryTargetsEnvValue, EngineType, GeneratorConfig, GeneratorOptions } from '@prisma/generator-helper'
+import type {
+  BinaryTargetsEnvValue,
+  EngineType,
+  GeneratorConfig,
+  GeneratorOptions,
+  SqlQueryOutput,
+} from '@prisma/generator-helper'
 import type { BinaryTarget } from '@prisma/get-platform'
 import { binaryTargets, getBinaryTargetForCurrentPlatform } from '@prisma/get-platform'
 import { bold, gray, green, red, underline, yellow } from 'kleur/colors'
 import pMap from 'p-map'
 import path from 'path'
 
-import { getConfig, getDMMF, getSchemaPath, GetSchemaResult, mergeSchemas, vercelPkgPathRegex } from '..'
+import {
+  getConfig,
+  getDMMF,
+  getEnvPaths,
+  GetSchemaResult,
+  getSchemaWithPath,
+  mergeSchemas,
+  vercelPkgPathRegex,
+} from '..'
 import { Generator } from '../Generator'
 import { resolveOutput } from '../resolveOutput'
 import { extractPreviewFeatures } from '../utils/extractPreviewFeatures'
@@ -46,7 +60,6 @@ export type GetGeneratorOptions = {
   cliVersion?: string
   version?: string
   printDownloadProgress?: boolean
-  baseDir?: string // useful in tests to resolve the base dir from which `output` is resolved
   overrideGenerators?: GeneratorConfig[]
   skipDownload?: boolean
   binaryPathsOverride?: BinaryPathsOverride
@@ -54,6 +67,7 @@ export type GetGeneratorOptions = {
   postinstall?: boolean
   noEngine?: boolean
   allowNoModels?: boolean
+  typedSql?: SqlQueryOutput[]
 }
 /**
  * Makes sure that all generators have the binaries they deserve and returns a
@@ -69,7 +83,6 @@ export async function getGenerators(options: GetGeneratorOptions): Promise<Gener
     version,
     cliVersion,
     printDownloadProgress,
-    baseDir = path.dirname(schemaPath),
     overrideGenerators,
     skipDownload,
     binaryPathsOverride,
@@ -77,6 +90,7 @@ export async function getGenerators(options: GetGeneratorOptions): Promise<Gener
     postinstall,
     noEngine,
     allowNoModels,
+    typedSql,
   } = options
 
   if (!schemaPath) {
@@ -86,7 +100,7 @@ export async function getGenerators(options: GetGeneratorOptions): Promise<Gener
   let schemaResult: GetSchemaResult | null = null
 
   try {
-    schemaResult = await getSchemaPath(schemaPath)
+    schemaResult = await getSchemaWithPath(schemaPath)
   } catch (_) {
     throw new Error(`${schemaPath} does not exist`)
   }
@@ -164,6 +178,7 @@ export async function getGenerators(options: GetGeneratorOptions): Promise<Gener
       async (generator, index) => {
         let generatorPath = parseEnvValue(generator.provider)
         let paths: GeneratorPaths | undefined
+        const baseDir = path.dirname(generator.sourceFilePath ?? schemaPath)
 
         // as of now mostly used by studio
         const providerValue = parseEnvValue(generator.provider)
@@ -211,6 +226,7 @@ The generator needs to either define the \`defaultOutput\` path in the manifest 
         }
 
         const datamodel = mergeSchemas({ schemas })
+        const envPaths = await getEnvPaths(schemaPath, { cwd: generator.output.value! })
 
         const options: GeneratorOptions = {
           datamodel,
@@ -223,6 +239,8 @@ The generator needs to either define the \`defaultOutput\` path in the manifest 
           postinstall,
           noEngine,
           allowNoModels,
+          envPaths,
+          typedSql,
         }
 
         // we set the options here a bit later after instantiating the Generator,
