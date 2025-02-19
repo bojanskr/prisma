@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises'
+import path from 'node:path'
 
+import type { PrismaConfigInternal } from '@prisma/config'
 import { arg, Command, format, formatms, formatSchema, HelpError, validate } from '@prisma/internals'
 import { getSchemaPathAndPrint } from '@prisma/migrate'
 import { bold, dim, red, underline } from 'kleur/colors'
@@ -22,6 +24,7 @@ ${bold('Usage')}
 ${bold('Options')}
 
   -h, --help   Display this help message
+    --config   Custom path to your Prisma config file
     --schema   Custom path to your Prisma schema
 
 ${bold('Examples')}
@@ -34,13 +37,15 @@ Or specify a Prisma schema path
 
   `)
 
-  public async parse(argv: string[]): Promise<string | Error> {
+  public async parse(argv: string[], config: PrismaConfigInternal): Promise<string | Error> {
     const before = Math.round(performance.now())
     const args = arg(argv, {
       '--help': Boolean,
       '-h': '--help',
       '--schema': String,
+      '--config': String,
       '--telemetry-information': String,
+      '--check': Boolean,
     })
 
     if (args instanceof Error) {
@@ -51,7 +56,7 @@ Or specify a Prisma schema path
       return this.help()
     }
 
-    const { schemaPath, schemas } = await getSchemaPathAndPrint(args['--schema'])
+    const { schemaPath, schemas } = await getSchemaPathAndPrint(args['--schema'], config.schema)
 
     const formattedDatamodel = await formatSchema({ schemas })
 
@@ -60,13 +65,30 @@ Or specify a Prisma schema path
       schemas: formattedDatamodel,
     })
 
+    if (args['--check']) {
+      for (const [filename, formattedSchema] of formattedDatamodel) {
+        const originalSchemaTuple = schemas.find((s) => s[0] === filename)
+        if (!originalSchemaTuple) {
+          return new HelpError(`${bold(red(`!`))} The schema ${underline(filename)} is not found in the schema list.`)
+        }
+        const [, originalSchema] = originalSchemaTuple
+        if (originalSchema !== formattedSchema) {
+          return new HelpError(
+            `${bold(red(`!`))} There are unformatted files. Run ${underline('prisma format')} to format them.`,
+          )
+        }
+      }
+      return 'All files are formatted correctly!'
+    }
+
     for (const [filename, data] of formattedDatamodel) {
       await fs.writeFile(filename, data)
     }
 
     const after = Math.round(performance.now())
+    const schemaRelativePath = path.relative(process.cwd(), schemaPath)
 
-    return `Formatted ${underline(schemaPath)} in ${formatms(after - before)} 🚀`
+    return `Formatted ${underline(schemaRelativePath)} in ${formatms(after - before)} 🚀`
   }
 
   public help(error?: string): string | HelpError {

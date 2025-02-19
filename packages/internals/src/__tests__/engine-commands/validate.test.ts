@@ -3,7 +3,7 @@ import path from 'path'
 import stripAnsi from 'strip-ansi'
 
 import { isRustPanic, validate } from '../..'
-import { readSchemaFromSingleFile } from '../../cli/getSchema'
+import { getSchemaWithPath } from '../../cli/getSchema'
 import type { MultipleSchemas, SchemaFileInput } from '../../utils/schemaFileInput'
 import { fixturesPath } from '../__utils__/fixtures'
 
@@ -254,8 +254,36 @@ describe('validate', () => {
             18 |           posts        Post[]
             19 |           posts        Post[]
                | 
+            error: Error validating model "User": At most one field must be marked as the id field with the \`@id\` attribute.
+              -->  schema.prisma:10
+               | 
+             9 |         
+            10 |         model User {
+            11 |           id           String     @id @default(cuid())
+            12 |           id           String     @id @default(cuid())
+            13 |           name         String
+            14 |           email        String     @unique
+            15 |           status       String     @default("")
+            16 |           permissions  Permission @default()
+            17 |           permissions  Permission @default("")
+            18 |           posts        Post[]
+            19 |           posts        Post[]
+            20 |         }
+               | 
+            error: Argument "value" is missing.
+              -->  schema.prisma:16
+               | 
+            15 |           status       String     @default("")
+            16 |           permissions  Permission @default()
+               | 
+            error: Error parsing attribute "@default": Expected an enum value, but found \`""\`.
+              -->  schema.prisma:17
+               | 
+            16 |           permissions  Permission @default()
+            17 |           permissions  Permission @default("")
+               | 
 
-            Validation Error Count: 3
+            Validation Error Count: 6
             [Context: validate]
 
             Prisma CLI Version : 0.0.0"
@@ -354,8 +382,36 @@ describe('validate', () => {
             19 |             posts        Post[]
             20 |             posts        Post[]
                | 
+            error: Error validating model "User": At most one field must be marked as the id field with the \`@id\` attribute.
+              -->  schema.prisma:11
+               | 
+            10 | 
+            11 |           model User {
+            12 |             id           String     @id @default(cuid())
+            13 |             id           String     @id @default(cuid())
+            14 |             name         String
+            15 |             email        String     @unique
+            16 |             status       String     @default("")
+            17 |             permissions  Permission @default()
+            18 |             permissions  Permission @default("")
+            19 |             posts        Post[]
+            20 |             posts        Post[]
+            21 |           }
+               | 
+            error: Argument "value" is missing.
+              -->  schema.prisma:17
+               | 
+            16 |             status       String     @default("")
+            17 |             permissions  Permission @default()
+               | 
+            error: Error parsing attribute "@default": Expected an enum value, but found \`""\`.
+              -->  schema.prisma:18
+               | 
+            17 |             permissions  Permission @default()
+            18 |             permissions  Permission @default("")
+               | 
 
-            Validation Error Count: 3
+            Validation Error Count: 6
             [Context: validate]
 
             Prisma CLI Version : 0.0.0"
@@ -391,12 +447,12 @@ describe('validate', () => {
     })
 
     test('chinook introspected schema', async () => {
-      const { schemas } = await readSchemaFromSingleFile(path.join(fixturesPath, 'chinook.prisma'))
+      const { schemas } = await getSchemaWithPath(path.join(fixturesPath, 'chinook.prisma'))
       validate({ schemas })
     })
 
     test('odoo introspected schema', async () => {
-      const { schemas } = await readSchemaFromSingleFile(path.join(fixturesPath, 'odoo.prisma'))
+      const { schemas } = await getSchemaWithPath(path.join(fixturesPath, 'odoo.prisma'))
       validate({ schemas })
     })
   })

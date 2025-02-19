@@ -4,16 +4,25 @@ import {
   createDatabase,
   getConfig,
   getEffectiveUrl,
+  getMigrateConfigDir,
   getSchema,
-  getSchemaDir,
+  PRISMA_POSTGRES_PROVIDER,
   uriToCredentials,
 } from '@prisma/internals'
 import { bold } from 'kleur/colors'
 
 import { ConnectorType } from './printDatasources'
+import { getSocketFromDatabaseCredentials } from './unixSocket'
 
 export type MigrateAction = 'create' | 'apply' | 'unapply' | 'dev' | 'push'
-export type PrettyProvider = 'MySQL' | 'PostgreSQL' | 'SQLite' | 'SQL Server' | 'CockroachDB' | 'MongoDB'
+export type PrettyProvider =
+  | 'MySQL'
+  | 'PostgreSQL'
+  | 'Prisma Postgres'
+  | 'SQLite'
+  | 'SQL Server'
+  | 'CockroachDB'
+  | 'MongoDB'
 
 // TODO: extract functions in their own files?
 
@@ -25,6 +34,7 @@ export type DatasourceInfo = {
   dbName?: string // database name
   schema?: string // database schema (!= multiSchema, can be found in the connection string like `?schema=myschema`)
   schemas?: string[] // database schemas from the datasource (multiSchema preview feature)
+  configDir?: string
 }
 
 // TODO: sometimes this function is called with a `schemaPath`, even though the schema(s) have already been read from disk.
@@ -60,6 +70,7 @@ export async function getDatasourceInfo({
       url: undefined,
       schema: undefined,
       schemas: undefined,
+      configDir: undefined,
     }
   }
 
@@ -76,6 +87,7 @@ export async function getDatasourceInfo({
       url: url || undefined,
       schema: undefined,
       schemas: firstDatasource.schemas,
+      configDir: getMigrateConfigDir(config, schemaPath),
     }
   }
 
@@ -100,6 +112,7 @@ export async function getDatasourceInfo({
       url,
       schema,
       schemas: firstDatasource.schemas,
+      configDir: getMigrateConfigDir(config, schemaPath),
     }
 
     // Default to `postgres` database name for PostgreSQL
@@ -118,6 +131,7 @@ export async function getDatasourceInfo({
       url,
       schema: undefined,
       schemas: firstDatasource.schemas,
+      configDir: getMigrateConfigDir(config, schemaPath),
     }
   }
 }
@@ -134,7 +148,7 @@ export async function ensureCanConnectToDatabase(schemaPath?: string): Promise<B
     throw new Error(`A datasource block is missing in the Prisma schema file.`)
   }
 
-  const schemaDir = (await getSchemaDir(schemaPath))!
+  const schemaDir = getMigrateConfigDir(config, schemaPath)
   const url = getEffectiveUrl(firstDatasource).value
 
   // url exists because `ignoreEnvVarErrors: false` would have thrown an error if not
@@ -158,7 +172,7 @@ export async function ensureDatabaseExists(action: MigrateAction, schemaPath?: s
     throw new Error(`A datasource block is missing in the Prisma schema file.`)
   }
 
-  const schemaDir = (await getSchemaDir(schemaPath))!
+  const schemaDir = getMigrateConfigDir(config, schemaPath)
   const url = getEffectiveUrl(firstDatasource).value
 
   // url exists because `ignoreEnvVarErrors: false` would have thrown an error if not
@@ -210,7 +224,11 @@ export function getDbLocation(credentials: DatabaseCredentials): string | undefi
     return credentials.uri!
   }
 
-  if (credentials.host && credentials.port) {
+  const socket = getSocketFromDatabaseCredentials(credentials)
+
+  if (socket) {
+    return `unix:${socket}`
+  } else if (credentials.host && credentials.port) {
     return `${credentials.host}:${credentials.port}`
   } else if (credentials.host) {
     return `${credentials.host}`
@@ -231,6 +249,8 @@ export function prettifyProvider(provider: ConnectorType): PrettyProvider {
     case 'postgres':
     case 'postgresql':
       return `PostgreSQL`
+    case PRISMA_POSTGRES_PROVIDER:
+      return `Prisma Postgres`
     case 'sqlite':
       return `SQLite`
     case 'cockroachdb':

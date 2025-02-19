@@ -1,3 +1,4 @@
+import type { PrismaConfigInternal } from '@prisma/config'
 import Debug from '@prisma/debug'
 import {
   arg,
@@ -7,10 +8,11 @@ import {
   format,
   getCommandWithExecutor,
   getConfig,
-  getSchemaPath,
+  getSchemaWithPath,
   HelpError,
   isError,
   loadEnvFile,
+  toSchemasContainer,
   validate,
 } from '@prisma/internals'
 import { bold, dim, green, red } from 'kleur/colors'
@@ -48,6 +50,7 @@ ${bold('Usage')}
 ${bold('Options')}
 
        -h, --help   Display this help message
+         --config   Custom path to your Prisma config file
          --schema   Custom path to your Prisma schema
        -n, --name   Name the migration
     --create-only   Create a new migration but do not apply it
@@ -67,7 +70,7 @@ ${bold('Examples')}
   ${dim('$')} prisma migrate dev --create-only
   `)
 
-  public async parse(argv: string[]): Promise<string | Error> {
+  public async parse(argv: string[], config: PrismaConfigInternal): Promise<string | Error> {
     const args = arg(argv, {
       '--help': Boolean,
       '-h': '--help',
@@ -77,6 +80,7 @@ ${bold('Examples')}
       // '-f': '--force',
       '--create-only': Boolean,
       '--schema': String,
+      '--config': String,
       '--skip-generate': Boolean,
       '--skip-seed': Boolean,
       '--telemetry-information': String,
@@ -86,15 +90,15 @@ ${bold('Examples')}
       return this.help(args.message)
     }
 
-    await checkUnsupportedDataProxy('migrate dev', args, true)
+    await checkUnsupportedDataProxy('migrate dev', args, config.schema, true)
 
     if (args['--help']) {
       return this.help()
     }
 
-    loadEnvFile({ schemaPath: args['--schema'], printMessage: true })
+    await loadEnvFile({ schemaPath: args['--schema'], printMessage: true, config })
 
-    const { schemaPath, schemas } = (await getSchemaPathAndPrint(args['--schema']))!
+    const { schemaPath, schemas } = (await getSchemaPathAndPrint(args['--schema'], config.schema))!
 
     const datasourceInfo = await getDatasourceInfo({ schemaPath })
     printDatasource({ datasourceInfo })
@@ -253,7 +257,7 @@ ${bold('Examples')}
         migrationsDirectoryPath: migrate.migrationsDirectoryPath!,
         migrationName: migrationName || '',
         draft: args['--create-only'] ? true : false,
-        prismaSchema: migrate.getPrismaSchema(),
+        schema: toSchemasContainer((await migrate.getPrismaSchema()).schemas),
       })
       debug({ createMigrationResult })
 
@@ -297,7 +301,7 @@ ${green('Your database is now in sync with your schema.')}\n`,
 
     // Run if not skipped
     if (!process.env.PRISMA_MIGRATE_SKIP_GENERATE && !args['--skip-generate']) {
-      await migrate.tryToRunGenerate()
+      await migrate.tryToRunGenerate(datasourceInfo)
       process.stdout.write('\n') // empty line
     }
 
@@ -322,7 +326,7 @@ ${green('Your database is now in sync with your schema.')}\n`,
           }
         } else {
           // Only used to help users to set up their seeds from old way to new package.json config
-          const { schemaPath } = (await getSchemaPath(args['--schema']))!
+          const { schemaPath } = (await getSchemaWithPath(args['--schema'], config.schema))!
           // we don't want to output the returned warning message
           // but we still want to run it for `legacyTsNodeScriptWarning()`
           await verifySeedConfigAndReturnMessage(schemaPath)

@@ -1,8 +1,6 @@
-import { getSchemaPath, type GetSchemaResult, link, logger } from '@prisma/internals'
+import { type GetSchemaOptions, type GetSchemaResult, getSchemaWithPath, type SchemaPathFromConfig } from '@prisma/internals'
 import { dim } from 'kleur/colors'
 import path from 'path'
-
-import { NoSchemaFoundError } from './errors'
 
 // TODO move NoSchemaFoundError to `@prisma/internals` and this too
 // then replace the 2 hardcoded errors to NoSchemaFoundError in
@@ -11,39 +9,22 @@ import { NoSchemaFoundError } from './errors'
 /**
  * If a path is provided checks that it exists or error
  * If no path provided check in default location(s) or error
- * Schema found: print to console it's relative path
+ * Schema found: print to console its relative path
  *
- * @returns {String} schemaPath
+ * @returns {GetSchemaResult}
  */
-export async function getSchemaPathAndPrint(schemaPathProvided?: string): Promise<GetSchemaResult>
 export async function getSchemaPathAndPrint(
   schemaPathProvided?: string,
-  postinstallCwd?: string,
-): Promise<GetSchemaResult | null>
-export async function getSchemaPathAndPrint(
-  schemaPathProvided?: string,
-  postinstallCwd?: string,
-): Promise<GetSchemaResult | null> {
-  const cwdOptions = postinstallCwd ? { cwd: postinstallCwd } : undefined
-  const schemaPathResult = await getSchemaPath(schemaPathProvided, cwdOptions)
-  if (!schemaPathResult) {
-    // Special case for Generate command
-    if (cwdOptions !== undefined) {
-      logger.warn(`We could not find your Prisma schema in the default locations (see: ${link(
-        'https://pris.ly/d/prisma-schema-location',
-      )}.
-If you have a Prisma schema file in a custom path, you will need to run
-\`prisma generate --schema=./path/to/your/schema.prisma\` to generate Prisma Client.
-If you do not have a Prisma schema file yet, you can ignore this message.`)
-      return null
-    }
+  schemaPathFromConfig?: SchemaPathFromConfig,
+  options?: GetSchemaOptions,
+): Promise<GetSchemaResult> {
+  const schemaPathResult = await getSchemaWithPath(schemaPathProvided, schemaPathFromConfig, options)
 
-    throw new NoSchemaFoundError()
-  }
-
-  process.stdout.write(
-    dim(`Prisma schema loaded from ${path.relative(process.cwd(), schemaPathResult.schemaPath)}`) + '\n',
-  )
+  printSchemaLoadedMessage(schemaPathResult.schemaPath)
 
   return schemaPathResult
+}
+
+export function printSchemaLoadedMessage(schemaPath: string) {
+  process.stdout.write(dim(`Prisma schema loaded from ${path.relative(process.cwd(), schemaPath)}`) + '\n')
 }
